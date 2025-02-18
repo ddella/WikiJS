@@ -1,0 +1,196 @@
+# Start the deployment
+#   docker compose --file docker.yaml up --detach
+#   docker compose --file docker.yaml restart
+# Destroy the deployment
+#   docker compose --file docker.yaml down --remove-orphans
+# Stop by keeps everything
+#   docker compose --file docker.yaml stop
+#   docker compose --file docker.yaml rm --force
+# List the running container
+#   docker ps --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}'
+# Jump inside a container
+#   docker exec -it psql-01 /bin/sh
+# Check logs
+#   docker compose --file docker.yaml logs
+networks:
+  wikijs:
+    name: core-net
+    external: true
+
+services:
+# ------------------------------------------------#
+#        PostgreSQL Container
+# ------------------------------------------------#
+  postgresql:
+    container_name: psql-01
+    hostname: psql-01
+    domainname: kloud.lan
+    image: 'bitnami/postgresql-repmgr:17.2.0-debian-12-r1-patch1'
+    environment:
+      # - POSTGRES_USER=postgresadmin
+      - POSTGRESQL_PASSWORD=custompassword
+      # - REPMGR_USERNAME=repmgrusername
+      - REPMGR_PASSWORD=repmgrpassword
+      - REPMGR_NODE_NAME=psql-01
+      - REPMGR_PRIMARY_HOST=psql-01
+      - REPMGR_NODE_NETWORK_NAME=psql-01
+      - REPMGR_PARTNER_NODES=psql-01,psql-02
+      - REPMGR_NODE_ID=1
+      - REPMGR_NODE_PRIORITY=100
+      - REPMGR_SWITCH_ROLE=yes
+      # - REPMGR_LOG_LEVEL=DEBUG
+      - POSTGRESQL_ENABLE_TLS=yes
+      - POSTGRESQL_TLS_CERT_FILE=/bitnami/postgresql/certs/psql.crt
+      - POSTGRESQL_TLS_KEY_FILE=/bitnami/postgresql/certs/psql.key
+      - POSTGRESQL_TLS_CA_FILE=/bitnami/postgresql/certs/wikijs-ca.crt
+      - POSTGRESQL_TIMEZONE=America/Montreal
+      - POSTGRESQL_LOG_TIMEZONE=America/Montreal
+      - TZ=America/Montreal
+      - PGUSER=postgres
+      - PGSSLMODE=verify-ca
+      - PGSSLCERT=/bitnami/postgresql/certs/psql.crt
+      - PGSSLKEY=/bitnami/postgresql/certs/psql.key
+      - PGSSLROOTCERT=/bitnami/postgresql/certs/wikijs-ca.crt
+    ports:
+    # You need to expose the port outside the container, for the health check by the load balancer
+      - '5432:5432'
+    # logging:
+    #   driver: "none"
+    restart: unless-stopped
+    volumes:
+      - /opt/psql/postgresql:/bitnami/postgresql
+      - /opt/psql/postgresql/tmp:/opt/bitnami/postgresql/tmp
+      - /opt/psql/postgresql/logs:/opt/bitnami/postgresql/logs
+      # repmgr directories
+      - /opt/repmgr/data:/bitnami/postgresql/data
+      - /opt/repmgr/conf:/opt/bitnami/repmgr/conf
+    networks:
+      wikijs:
+        # Define a static ip for the container. The containter can be accessible by others devices on the LAN network with this IP.
+        ipv4_address: 192.168.255.21
+
+# ------------------------------------------------#
+#        pgAdmin Container
+# ------------------------------------------------#
+  pgadmin:
+    container_name: pgadmin-01
+    hostname: pgadmin-01
+    domainname: kloud.lan
+    image: dpage/pgadmin4:8.13.0
+    environment:
+      - PGADMIN_DEFAULT_EMAIL='testpg@kloud.lan'
+      - PGADMIN_DEFAULT_PASSWORD='testpg'
+      - PGADMIN_LISTEN_PORT=8080
+      - PGADMIN_CONFIG_LOGIN_BANNER="Authorised users only! username = testpg at kloud.lan - password = testpg"
+      - TZ=America/Montreal
+    restart: unless-stopped
+    depends_on:
+      - postgresql
+    # ports:
+    # No need to expose the port outside the container, we're using a load balancer
+    #   - 8080:8080
+    volumes:
+      - /opt/pgadmin:/var/lib/pgadmin
+    networks:
+      wikijs:
+        # Define a static ip for the container.
+        # The containter can be accessible by others devices on the LAN network with this IP.
+        ipv4_address: 192.168.255.31
+
+# Start the deployment
+#   docker compose --file docker.yaml up --detach
+#   docker compose --file docker.yaml restart
+# Destroy the deployment
+#   docker compose --file docker.yaml down
+# Stop by keeps everything
+#   docker compose --file docker.yaml stop
+#   docker compose --file docker.yaml rm --force
+# List the running container
+#   docker ps --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}'
+# Jump inside a container
+#   docker exec -it haproxy-01 /bin/sh
+# Check logs
+#   docker compose --file docker.yaml logs
+# networks:
+#   wikijs:
+#     name: core-net
+#     external: true
+# services:
+# ------------------------------------------------#
+#        HAPROXY Container
+# ------------------------------------------------#
+  haproxy:
+    image: haproxy:3.1.0-alpine3.20
+    container_name: haproxy-01
+    hostname: haproxy-01
+    domainname: kloud.lan
+    restart: unless-stopped
+    # depends_on:
+    #   - postgresql
+    ports:
+      #  HAProxy stats page
+      - "9445:7000"
+      # PostgreSQL Read Write
+      - "5435:5435"
+      # PostgreSQL Read Only
+      - "5436:5436"
+      # Wiki JS frontend
+      - "9443:9443"
+      # pgAdmin frontend
+      - "9444:9444"
+    volumes:
+      - /opt/haproxy/etc/haproxy:/usr/local/etc/haproxy:ro
+    networks:
+      wikijs:
+        # Define a static ip for the container. The containter can be accessible by others devices on the LAN network with this IP.
+        ipv4_address: 192.168.255.101
+
+# Start the deployment
+#   docker compose --file docker.yaml up --detach
+#   docker compose --file docker.yaml restart
+# Destroy the deployment
+#   docker compose --file docker.yaml down
+# Stop by keeps everything
+#   docker compose --file docker.yaml stop
+#   docker compose --file docker.yaml rm --force
+# List the running container
+#   docker ps --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}'
+# Jump inside a container
+#   docker exec -it wikijs-01 /bin/sh
+# Check logs
+#   docker compose --file docker.yaml logs
+# networks:
+#   wikijs:
+#     name: core-net
+#     external: true
+# services:
+# ------------------------------------------------#
+#        Wiki JS Container
+# ------------------------------------------------#
+  wikijs:
+    image: requarks/wiki:canary-2.5.0-dev.383
+    # image: linuxserver/wikijs:version-v2.5.305
+    container_name: wikijs-01
+    hostname: wikijs-01
+    domainname: kloud.lan
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Montreal
+      # - CONFIG_FILE="Path to the config.yml file"   # Doesn't work!
+    volumes:
+      - /opt/wikijs/config/config.yml:/wiki/config.yml
+      - /opt/wikijs/config:/config
+      - /opt/wikijs/data:/wiki/data   # ???
+      # - /opt/wikijs/config/config.yml:/wiki/config.yml
+      # - /opt/wikijs/config:/config
+      # - /opt/wikijs/data:/wiki/data
+      # - /opt/wikijs/config:/config    # linuxserver/wikijs:version-v2.5.305
+      # - /opt/wikijs/data:/data        # linuxserver/wikijs:version-v2.5.305
+    # ports:
+    #   - 3000:3000
+    networks:
+      wikijs:
+        # Define a static ip for the container. The containter can be accessible by others devices on the LAN network with this IP.
+        ipv4_address: 192.168.255.11
